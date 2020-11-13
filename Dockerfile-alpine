@@ -1,13 +1,50 @@
+FROM golang:1-alpine AS builder
+MAINTAINER x0rzkov <x0rzkov@protonmail.com>
+
+ARG VERSION
+ARG GIT_COMMIT
+ARG BUILD_DATE
+
+ARG CGO=1
+ENV CGO_ENABLED=${CGO}
+ENV GOOS=linux
+ENV GO111MODULE=on
+
+WORKDIR /go/src/github.com/vulcand/vulcand
+COPY . /go/src/github.com/vulcand/vulcand
+
+RUN apk update && \
+    apk add --no-cache --no-progress git ca-certificates musl-dev gcc make
+
+RUN GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vulcand . && \
+	GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vctl/vctl ./vctl && \
+	GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vbundle/vbundle ./vbundle
+
 FROM alpine:3.12
 MAINTAINER x0rzkov <x0rzkov@protonmail.com>
 
-RUN apk add --no-cache ca-certificates
+# Install tini to /usr/local/sbin
+ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini-muslc-amd64 /usr/local/sbin/tini
+
+# Install runtime dependencies & create runtime user
+RUN apk add --no-cache --no-progress ca-certificates openssl \
+	&& chmod +x /usr/local/sbin/tini && mkdir -p /opt \
+	&& adduser -D s2v -h /opt/vulcand -s /bin/sh \
+	&& su s2v -c 'cd /opt/vulcand; mkdir -p bin config data'
+
+# Switch to user context
+USER s2v
+WORKDIR /opt/vulcand
+
+COPY --from=builder /go/src/github.com/vulcand/vulcand/vulcand /opt/vulcand/bin/vulcand
+COPY --from=builder /go/src/github.com/vulcand/vulcand/vctl/vctl /opt/vulcand/bin/vctl
+COPY --from=builder /go/src/github.com/vulcand/vulcand/vbundle/vbundle /opt/vulcand/bin/vbundle
 
 EXPOSE 8181 8182
-COPY vulcand /app/vulcand
-COPY ./vctl/vctl /app/vctl
-COPY ./vbundle/vbundle /app/vbundle
-ENV PATH=/app:$PATH
 
-ENTRYPOINT ["/app/vulcand"]
-CMD ["-etcd=http://127.0.0.1:4001", "-etcd=127.0.0.1:4002", "-etcd=127.0.0.1:4003", "-sealKey=1b727a055500edd9ab826840ce9428dc8bace1c04addc67bbac6b096e25ede4b"]
+ENV PATH $PATH:/opt/vulcand/bin
+
+# Container configuration
+VOLUME ["/opt/vulcand/data"]
+ENTRYPOINT ["tini", "-g", "--"]
+CMD ["vulcand", "-etcd=http://127.0.0.1:4001", "-etcd=127.0.0.1:4002", "-etcd=127.0.0.1:4003", "-sealKey=1b727a055500edd9ab826840ce9428dc8bace1c04addc67bbac6b096e25ede4b"]

@@ -1,4 +1,4 @@
-FROM mhart/alpine-node:0.10
+FROM mhart/alpine-node:0.10 AS builder
 MAINTAINER x0rzkov <x0rzkov@protonmail.com>
 
 RUN apk add --no-cache --no-progress make ca-certificates git nano bash jq python

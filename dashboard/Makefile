@@ -1,7 +1,6 @@
 SRC_DIRECTORY=src
 DIST_DIRECTORY=dist
 
-
 all: css js html images fonts
 
 clean:
