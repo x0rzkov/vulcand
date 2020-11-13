@@ -7,6 +7,22 @@ SEAL_KEY := 1b727a055500edd9ab826840ce9428dc8bace1c04addc67bbac6b096e25ede4b
 ETCD_FLAGS := VULCAND_TEST_ETCD_NODES=${ETCD_NODES} VULCAND_TEST_ETCD_USER=root VULCAND_TEST_ETCD_PASS=rootpw VULCAND_TEST_ETCD_TLS=true
 VULCAN_FLAGS := ${ETCD_FLAGS} VULCAND_TEST_ETCD_PREFIX=${PREFIX} VULCAND_TEST_API_URL=${API_URL} VULCAND_TEST_SERVICE_URL=${SERVICE_URL} VULCAND_TEST_SEAL_KEY=${SEAL_KEY}
 
+# Go configuration
+GOOS?=$(shell go env GOHOSTOS)
+GOARCH?=$(shell go env GOHOSTARCH)
+
+# Check the local operatig system
+is_windows:=$(filter windows,$(GOOS))
+is_darwin:=$(filter darwin,$(GOOS))
+is_linux:=$(filter linux,$(GOOS))
+
+# Add exe extension if windows target
+EXT:=$(if $(is_windows),".exe","")
+LDLAGS_LAUNCHER:=$(if $(is_windows),-ldflags "-H=windowsgui",)
+
+VERSION:=`git describe --tags --always`
+GIT_COMMIT:=`git rev-list -1 HEAD --abbrev-commit`
+
 test: clean
 	go test -p 1 -parallel=1 -v ./... -cover
 
@@ -72,11 +88,19 @@ profile:
 docker-clean:
 	docker rm -f vulcand
 
-docker-build:
+docker-build: docker-build-alpine docker-build-scratch
+
+docker-build-alpine:
 	GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vulcand .
 	GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vctl/vctl ./vctl
 	GOOS=linux go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vbundle/vbundle ./vbundle
-	docker build -t mailgun/vulcand:latest -f ./Dockerfile-scratch .
+	docker build -t x0rzkov/vulcand:alpine-latest -f ./Dockerfile-alpine .
+
+docker-build-scratch:
+	GOOS=$(GOOS) go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vulcand .
+	GOOS=$(GOOS) go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vctl/vctl ./vctl
+	GOOS=$(GOOS) go build -a -tags netgo -installsuffix cgo -ldflags '-w' -o ./vbundle/vbundle ./vbundle
+	docker build -t x0rzkov/vulcand:$(GOOS)-latest -f ./Dockerfile-scratch .
 
 docker-minimal-linux:
 	bash scripts/build-minimal-linux.sh ${SEAL_KEY}

@@ -1,4 +1,6 @@
 FROM scratch
+MAINTAINER x0rzkov <x0rzkov@protonmail.com>
+
 EXPOSE 8181 8182
 COPY vulcand /app/vulcand
 COPY ./vctl/vctl /app/vctl
