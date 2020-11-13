@@ -1,0 +1,66 @@
+---
+version: "3.8"
+services:
+
+  vulcand:
+    image: x0rzkov/vulcand:latest
+    container_name: ${NAMESPACE}-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+    - etcd0
+    - test-server
+    networks:
+      vulcand:
+        ipv4_address: 172.24.0.2
+      web:
+    ports:
+    - 8181:8181
+    - 8182:8182
+    command: ["/go/bin/vulcand","--etcd","http://etcd0-v3:4001", "-sealKey", "e2eIbb2f2eb02180c391ac53f5d71wdzf2bf49c7112f4a54e7c4797fb1eb92c4"]
+
+  etcd0-v3:
+    image: quay.io/coreos/etcd:v3.4.13
+    container_name: ${NAMESPACE}-etcd-v3
+    networks:
+      vulcand:
+        ipv4_address: 172.24.0.4
+    ports:
+    - 4001:4001
+    - 2379:2379
+    - 2380:2380
+    volumes:
+    - data-etcd0:/data
+    environment:
+    - ETCD_NAME=etcd0
+    - ETCD_ADVERTISE_CLIENT_URLS=http://0.0.0.0:2379,http://0.0.0.0:4001
+    - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379,http://0.0.0.0:4001
+    - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://172.24.0.4:2380
+    - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+    - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster-1
+    - ETCD_INITIAL_CLUSTER=etcd0=http://172.24.0.4:2380
+    - ETCD_INITIAL_CLUSTER_STATE=new
+    - ETCD_DATA_DIR=/data
+
+  test-server:
+    image: jamesdbloom/mockserver
+    container_name: ${NAMESPACE}-server-test
+    networks:
+      vulcand:
+        ipv4_address: 172.24.0.3
+    ports:
+    - 1080:1080
+    - 9090:9090
+
+networks:
+  web:
+    external: true  
+  vulcand:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 172.24.0.0/24
+
+volumes:
+  data-etcd0-v3:
